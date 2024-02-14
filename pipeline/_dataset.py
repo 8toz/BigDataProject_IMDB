@@ -35,31 +35,38 @@ class Dataset:
 
     def _process_dataframe(self) -> None:
         """Process the complete df for feature extraction and other operations."""
-        self._complete_df.set_index("tconst",  inplace=True)
-        self._complete_df.drop(["Unnamed: 0", "movie_x", "movie_y"], axis=1, inplace=True)  # Here we remove unwanted columns
-        self._complete_df["numVotes"] = self._complete_df["numVotes"].fillna(0)
+        self._complete_df.set_index("tconst", inplace=True)
+        self._complete_df.drop(["Unnamed: 0", "movie_x", "movie_y"], axis=1,
+                               inplace=True)  # Here we remove unwanted columns
+        self._complete_df["numVotes"].fillna(0, inplace=True)
+        self._complete_df["runtimeMinutes"].replace({r"\N": 0}, inplace=True)
 
         directing_score = self._complete_df.groupby("director").agg({"label": ["mean", "sum"]})
         writer_score = self._complete_df.groupby("writer").agg({"label": ["mean", "sum"]})
 
         """We aggregate the writers and directors of the movies into lists."""
+
         def __make_unique_list(elem):
             return list(set(list(elem)))
 
         process_cols = ["director", "writer"]
         to_keep = list(set(self._complete_df.columns) - set(process_cols))
-        self._complete_df = self._complete_df.groupby(to_keep, as_index=False).agg({elem: __make_unique_list for elem in process_cols}).reset_index()
+        self._complete_df = self._complete_df.groupby(to_keep, as_index=False).agg(
+            {elem: __make_unique_list for elem in process_cols}).reset_index()
 
         """Now we use the directors and writers to extract scores for the movies."""
+
         def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float]:
             total, mean = 0., 0.
             for uid in elem:
                 total += target[("label", "sum")].loc[uid]
                 mean += target[("label", "mean")].loc[uid]
-            return mean/len(elem), total/len(elem)
+            return mean / len(elem), total / len(elem)
 
-        self._complete_df[["director_score_mean_mean", "director_score_mean_total"]] = self._complete_df["director"].apply(lambda elem: pd.Series(__get_scores(elem, target=directing_score)))
-        self._complete_df[["writer_score_mean_mean", "writer_score_mean_total"]] = self._complete_df["writer"].apply(lambda elem: pd.Series(__get_scores(elem, target=writer_score)))
+        self._complete_df[["director_score_mean_mean", "director_score_mean_total"]] = self._complete_df[
+            "director"].apply(lambda elem: pd.Series(__get_scores(elem, target=directing_score)))
+        self._complete_df[["writer_score_mean_mean", "writer_score_mean_total"]] = self._complete_df["writer"].apply(
+            lambda elem: pd.Series(__get_scores(elem, target=writer_score)))
         self._complete_df.drop(process_cols, axis=1, inplace=True)  # Here we remove unwanted columns
 
         """We combine year data, since they seem to be exclusive-"""
@@ -67,7 +74,6 @@ class Dataset:
         self._complete_df[year_cols] = self._complete_df[year_cols].replace(r"\N", None)
         self._complete_df["year"] = self._complete_df["endYear"].fillna(self._complete_df["startYear"])
         self._complete_df.drop(year_cols, axis=1, inplace=True)
-
 
     def generate_datasplit(self, careful: bool = True) -> None:
         """
@@ -109,3 +115,12 @@ class Dataset:
         if self._test_df is not None:
             return self._test_df
         raise ValueError("No test df generated yet. Please use generate_datasplit()")
+
+    @property
+    def complete_df(self) -> pd.DataFrame:
+        """
+        Return the complete df.
+
+        :return: The df.
+        """
+        return self._complete_df
