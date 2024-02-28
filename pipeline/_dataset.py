@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split
+import string
 
 
 class Dataset:
@@ -23,7 +23,7 @@ class Dataset:
         self._splits = splits
 
         self._make_dataframes()
-        self._process_dataframe(df=self._complete_df)
+        self._complete_df = self._process_dataframe(df=self._complete_df)
 
     def _make_dataframes(self) -> None:
         """Populate the complete DataFrame."""
@@ -37,15 +37,22 @@ class Dataset:
         self._directing_scores = self._complete_df.groupby("director").agg({"label": ["mean", "sum"]})
         self._writer_scores = self._complete_df.groupby("writer").agg({"label": ["mean", "sum"]})
 
-    def _process_dataframe(self, df: pd.DataFrame) -> None:
-        """Process the complete df for feature extraction and other operations."""
+    def _process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Process the complete df for feature extraction and other operations.
+
+        :param df: The dataframe to process.
+        :return: The processed df.
+        """
         df.set_index("tconst", inplace=True)
         df.drop(["Unnamed: 0", "movie_x", "movie_y"], axis=1,
-                               inplace=True)  # Here we remove unwanted columns
-        df["numVotes"].fillna(0, inplace=True)
-        df["runtimeMinutes"].replace({r"\N": 0}, inplace=True)
+                inplace=True)  # Here we remove unwanted columns
+        df["numVotes"].fillna(df["numVotes"].median(), inplace=True)  # We fill nan values with median of votes.
+        df["runtimeMinutes"].replace({r"\N": None}, inplace=True)
+        df["runtimeMinutes"].fillna(df["runtimeMinutes"].median(), inplace=True)
 
         """We aggregate the writers and directors of the movies into lists."""
+
         def __make_unique_list(elem):
             return list(set(list(elem)))
 
@@ -55,6 +62,7 @@ class Dataset:
             {elem: __make_unique_list for elem in process_cols}).reset_index()
 
         """Now we use the directors and writers to extract scores for the movies."""
+
         def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float]:
             total, mean = 0., 0.
             for uid in elem:
@@ -73,6 +81,18 @@ class Dataset:
         df[year_cols] = df[year_cols].replace(r"\N", None)
         df["year"] = df["endYear"].fillna(df["startYear"])
         df.drop(year_cols, axis=1, inplace=True)
+
+        """We check whether the primary/ original tiles are different."""
+        transtab = str.maketrans(dict.fromkeys('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{}~ |', ''))
+
+        def __check_titles(row) -> bool:
+            """Check if titles are different."""
+            pt = row["primaryTitle"].lower().translate(transtab)
+            ot = row["originalTitle"].lower().translate(transtab)
+            return not pt == ot
+
+        df["titles_changed"] = df.apply(__check_titles, axis=1)
+        return df
 
     def generate_datasplit(self, careful: bool = True) -> None:
         """
