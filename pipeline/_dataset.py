@@ -1,5 +1,5 @@
 import pandas as pd
-import string
+from unidecode import unidecode
 
 
 class Dataset:
@@ -87,8 +87,8 @@ class Dataset:
 
         def __check_titles(row) -> bool:
             """Check if titles are different."""
-            pt = row["primaryTitle"].lower().translate(transtab)
-            ot = row["originalTitle"].lower().translate(transtab)
+            pt = unidecode(row["primaryTitle"].lower().translate(transtab))
+            ot = unidecode(row["originalTitle"].lower().translate(transtab))
             return not pt == ot
 
         df["titles_changed"] = df.apply(__check_titles, axis=1)
