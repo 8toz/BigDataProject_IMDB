@@ -37,8 +37,8 @@ class Dataset:
         main_df = pd.concat([pd.read_csv(f"../data/train-{i}.csv") for i in range(1, 9)])
 
         self._complete_df = self._merge_df_with_auxiliary_data(main_df)
-        self._directing_scores = self._complete_df.groupby("director").agg({"label": ["mean", "sum"]})
-        self._writer_scores = self._complete_df.groupby("writer").agg({"label": ["mean", "sum"]})
+        self._directing_scores = self._complete_df.groupby("director").agg({"label": ["mean", "sum", "count"]})
+        self._writer_scores = self._complete_df.groupby("writer").agg({"label": ["mean", "sum", "count"]})
 
     def _merge_df_with_auxiliary_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -79,25 +79,27 @@ class Dataset:
 
         def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float, float]:
 
-            total, mean = 0., 0.
+            total, mean, count = 0., 0., 0.
             for uid in elem:
                 try:
                     total += target[("label", "sum")].loc[uid]
                     mean += target[("label", "mean")].loc[uid]
+                    count += target[("label", "count")].loc[uid]
                 except KeyError:  # If a uid is not in the external data sources.
                     print(f"Error: key not found {uid}")
                     total += target[("label", "sum")].mean()
                     mean += target[("label", "mean")].mean()
-            return mean / len(elem), total / len(elem), total
+                    count += target[("label", "count")].mean()
+            return mean / len(elem), total / len(elem), total-count
 
         process_cols = ["director", "writer"]
         to_keep = list(set(df.columns) - set(process_cols))
         modify_dict = {elem: __make_unique_list for elem in process_cols} | {elem: __keep for elem in to_keep}
 
         df = df.groupby(df.index, as_index=False).agg(modify_dict).reset_index()
-        df[["director_score_mean_mean", "director_score_mean_total", "director_score_total"]] = df[
+        df[["director_score_mean_mean", "director_score_mean_total", "director_score_total_pos"]] = df[
             "director"].apply(lambda elem: pd.Series(__get_scores(elem, target=self._directing_scores)))
-        df[["writer_score_mean_mean", "writer_score_mean_total", "writer_score_total"]] = df["writer"].apply(
+        df[["writer_score_mean_mean", "writer_score_mean_total", "writer_score_total_pos"]] = df["writer"].apply(
             lambda elem: pd.Series(__get_scores(elem, target=self._writer_scores)))
         df.drop(process_cols, axis=1, inplace=True)
         return df
