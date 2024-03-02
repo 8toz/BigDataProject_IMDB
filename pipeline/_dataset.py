@@ -8,6 +8,10 @@ class Dataset:
     _complete_df: pd.DataFrame
     _director_scores: pd.DataFrame
     _writer_scores: pd.DataFrame
+
+    _directing: pd.DataFrame
+    _writing: pd.DataFrame
+
     _train_df: pd.DataFrame | None
     _test_df: pd.DataFrame | None
 
@@ -22,76 +26,113 @@ class Dataset:
         self._train_df = None
         self._splits = splits
 
-        self._make_dataframes()
-        self._complete_df = self._process_dataframe(df=self._complete_df)
+        self._make_initial_dataframes()
+        self._complete_df = self.process_dataframe(df=self._complete_df)
 
-    def _make_dataframes(self) -> None:
+    def _make_initial_dataframes(self) -> None:
         """Populate the complete DataFrame."""
-        directing = pd.read_json("../data/directing.json")
-        writing = pd.read_json("../data/writing.json")
+        self._directing = pd.read_json("../data/directing.json")
+        self._writing = pd.read_json("../data/writing.json")
 
         main_df = pd.concat([pd.read_csv(f"../data/train-{i}.csv") for i in range(1, 9)])
 
-        main_df = main_df.merge(directing, left_on="tconst", right_on="movie")
-        self._complete_df = main_df.merge(writing, left_on="tconst", right_on="movie")
+        self._complete_df = self._merge_df_with_auxiliary_data(main_df)
         self._directing_scores = self._complete_df.groupby("director").agg({"label": ["mean", "sum"]})
         self._writer_scores = self._complete_df.groupby("writer").agg({"label": ["mean", "sum"]})
 
-    def _process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _merge_df_with_auxiliary_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Merge the dataframe with external data sources.
+
+        :param df: The dataframe.
+        :return: The merged dataframe.
+        """
+        df = df.merge(self._directing, left_on="tconst", right_on="movie")
+        df = df.merge(self._writing, left_on="tconst", right_on="movie")
+        return df
+
+    @staticmethod
+    def _initial_df_cleaning(df: pd.DataFrame) -> pd.DataFrame:
+        """Initial cleaning of the data."""
+        df.set_index("tconst", inplace=True)
+        for elem in ["Unnamed: 0", "movie_x", "movie_y"]:
+            try:
+                df.drop(elem, axis=1, inplace=True)  # Here we remove unwanted columns
+            except KeyError:
+                pass
+
+        df["numVotes"].fillna(df["numVotes"].median(), inplace=True)  # We fill nan values with median of votes.
+        df["runtimeMinutes"] = pd.to_numeric(df["runtimeMinutes"], errors="coerce")
+        df["runtimeMinutes"].fillna(df["runtimeMinutes"].median(), inplace=True)
+        return df
+
+    def _format_writer_director_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Here we aggregate the writers and directors of the movies into lists.
+        Additionally, we use the directors and writers to extract scores for the movies.
+        """
+        def __make_unique_list(elem) -> list:
+            return list(set(list(elem)))
+
+        def __keep(elem):
+            return list(elem)[0]
+
+        def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float]:
+            total, mean = 0., 0.
+            for uid in elem:
+                try:
+                    total += target[("label", "sum")].loc[uid]
+                    mean += target[("label", "mean")].loc[uid]
+                except KeyError:  # If a uid is not in the external data sources.
+                    pass
+            return mean / len(elem), total / len(elem)
+
+        process_cols = ["director", "writer"]
+        to_keep = list(set(df.columns) - set(process_cols))
+        modify_dict = {elem: __make_unique_list for elem in process_cols} | {elem: __keep for elem in to_keep}
+
+        df = df.groupby(df.index, as_index=False).agg(modify_dict).reset_index()
+        df[["director_score_mean_mean", "director_score_mean_total"]] = df[
+            "director"].apply(lambda elem: pd.Series(__get_scores(elem, target=self._directing_scores)))
+        df[["writer_score_mean_mean", "writer_score_mean_total"]] = df["writer"].apply(
+            lambda elem: pd.Series(__get_scores(elem, target=self._writer_scores)))
+        df.drop(process_cols, axis=1, inplace=True)
+        return df
+
+    @staticmethod
+    def _format_year_data(df: pd.DataFrame) -> pd.DataFrame:
+        """We combine year data, since they seem to be exclusive."""
+        year_cols = ["endYear", "startYear"]
+        for col in year_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df["year"] = df["endYear"].fillna(df["startYear"])
+        df.drop(year_cols, axis=1, inplace=True)
+        return df
+
+    @staticmethod
+    def _process_title_data(df: pd.DataFrame) -> pd.DataFrame:
+        """We check whether the primary/ original tiles are different."""
+        transtab = str.maketrans(dict.fromkeys('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{}~ |', ''))
+
+        df["primaryTitle"] = df["primaryTitle"].apply(lambda x: unidecode(str(x).lower().translate(transtab)))
+        df["originalTitle"] = df["originalTitle"].apply(lambda x: unidecode(str(x).lower().translate(transtab)))
+
+        df["titles_changed"] = df.apply(lambda row: (not row["primaryTitle"] == row["originalTitle"]) and (row["originalTitle"] is not None), axis=1)
+        return df
+
+    def process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Process the complete df for feature extraction and other operations.
 
         :param df: The dataframe to process.
         :return: The processed df.
         """
-        df.set_index("tconst", inplace=True)
-        df.drop(["Unnamed: 0", "movie_x", "movie_y"], axis=1,
-                inplace=True)  # Here we remove unwanted columns
-        df["numVotes"].fillna(df["numVotes"].median(), inplace=True)  # We fill nan values with median of votes.
-        df["runtimeMinutes"].replace({r"\N": None}, inplace=True)
-        df["runtimeMinutes"].fillna(df["runtimeMinutes"].median(), inplace=True)
-
-        """We aggregate the writers and directors of the movies into lists."""
-
-        def __make_unique_list(elem):
-            return list(set(list(elem)))
-
-        process_cols = ["director", "writer"]
-        to_keep = list(set(df.columns) - set(process_cols))
-        df = df.groupby(to_keep, as_index=False).agg(
-            {elem: __make_unique_list for elem in process_cols}).reset_index()
-
-        """Now we use the directors and writers to extract scores for the movies."""
-
-        def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float]:
-            total, mean = 0., 0.
-            for uid in elem:
-                total += target[("label", "sum")].loc[uid]
-                mean += target[("label", "mean")].loc[uid]
-            return mean / len(elem), total / len(elem)
-
-        df[["director_score_mean_mean", "director_score_mean_total"]] = df[
-            "director"].apply(lambda elem: pd.Series(__get_scores(elem, target=self._directing_scores)))
-        df[["writer_score_mean_mean", "writer_score_mean_total"]] = df["writer"].apply(
-            lambda elem: pd.Series(__get_scores(elem, target=self._writer_scores)))
-        df.drop(process_cols, axis=1, inplace=True)
-
-        """We combine year data, since they seem to be exclusive-"""
-        year_cols = ["endYear", "startYear"]
-        df[year_cols] = df[year_cols].replace(r"\N", None)
-        df["year"] = df["endYear"].fillna(df["startYear"])
-        df.drop(year_cols, axis=1, inplace=True)
-
-        """We check whether the primary/ original tiles are different."""
-        transtab = str.maketrans(dict.fromkeys('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{}~ |', ''))
-
-        def __check_titles(row) -> bool:
-            """Check if titles are different."""
-            pt = unidecode(row["primaryTitle"].lower().translate(transtab))
-            ot = unidecode(row["originalTitle"].lower().translate(transtab))
-            return not pt == ot
-
-        df["titles_changed"] = df.apply(__check_titles, axis=1)
+        if any([col not in df.columns for col in ["writer", "director"]]):  # check if all external data is merged
+            df = self._merge_df_with_auxiliary_data(df)
+        df = self._initial_df_cleaning(df)
+        df = self._format_writer_director_data(df)
+        df = self._format_year_data(df)
+        df = self._process_title_data(df)
         return df
 
     def generate_datasplit(self, careful: bool = True) -> None:
