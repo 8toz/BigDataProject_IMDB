@@ -61,9 +61,9 @@ class Dataset:
             except KeyError:
                 pass
 
-        df["numVotes"].fillna(df["numVotes"].median(), inplace=True)  # We fill nan values with median of votes.
+        df.fillna({"numVotes": df["numVotes"].median()}, inplace=True)  # We fill nan values with median of votes.
         df["runtimeMinutes"] = pd.to_numeric(df["runtimeMinutes"], errors="coerce")
-        df["runtimeMinutes"].fillna(df["runtimeMinutes"].median(), inplace=True)
+        df.fillna({"runtimeMinutes": df["runtimeMinutes"].median()}, inplace=True)
         return df
 
     def _format_writer_director_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -77,24 +77,27 @@ class Dataset:
         def __keep(elem):
             return list(elem)[0]
 
-        def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float]:
+        def __get_scores(elem, target: pd.DataFrame) -> tuple[float, float, float]:
+
             total, mean = 0., 0.
             for uid in elem:
                 try:
                     total += target[("label", "sum")].loc[uid]
                     mean += target[("label", "mean")].loc[uid]
                 except KeyError:  # If a uid is not in the external data sources.
-                    pass
-            return mean / len(elem), total / len(elem)
+                    print(f"Error: key not found {uid}")
+                    total += target[("label", "sum")].mean()
+                    mean += target[("label", "mean")].mean()
+            return mean / len(elem), total / len(elem), total
 
         process_cols = ["director", "writer"]
         to_keep = list(set(df.columns) - set(process_cols))
         modify_dict = {elem: __make_unique_list for elem in process_cols} | {elem: __keep for elem in to_keep}
 
         df = df.groupby(df.index, as_index=False).agg(modify_dict).reset_index()
-        df[["director_score_mean_mean", "director_score_mean_total"]] = df[
+        df[["director_score_mean_mean", "director_score_mean_total", "director_score_total"]] = df[
             "director"].apply(lambda elem: pd.Series(__get_scores(elem, target=self._directing_scores)))
-        df[["writer_score_mean_mean", "writer_score_mean_total"]] = df["writer"].apply(
+        df[["writer_score_mean_mean", "writer_score_mean_total", "writer_score_total"]] = df["writer"].apply(
             lambda elem: pd.Series(__get_scores(elem, target=self._writer_scores)))
         df.drop(process_cols, axis=1, inplace=True)
         return df
@@ -106,6 +109,7 @@ class Dataset:
         for col in year_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         df["year"] = df["endYear"].fillna(df["startYear"])
+        df["votes_per_year"] = df["numVotes"] / (2024 - df["year"])
         df.drop(year_cols, axis=1, inplace=True)
         return df
 
@@ -118,6 +122,7 @@ class Dataset:
         df["originalTitle"] = df["originalTitle"].apply(lambda x: unidecode(str(x).lower().translate(transtab)))
 
         df["titles_changed"] = df.apply(lambda row: (not row["primaryTitle"] == row["originalTitle"]) and (row["originalTitle"] is not None), axis=1)
+        df["title_len"] = df.apply(lambda row: len(row["primaryTitle"]), axis=1)
         return df
 
     def process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
