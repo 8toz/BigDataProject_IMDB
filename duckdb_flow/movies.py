@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 
 def integrate_movies(train_df, validation_df, test_df):
@@ -28,11 +29,23 @@ def preprocess_movies(train_df, validation_df, test_df):
     movies_df["numVotes"] = movies_df["numVotes"].astype(int)
     movies_df["runtimeMinutes"] = movies_df["runtimeMinutes"].astype(int)
 
+
     return movies_df
 
+
+#movie_id	primary_title	original_title	start_year	runtime_min	num_votes	label	subset	audit_time
 def merge_movies(df, con):
-    try:
+
         con.register('movies_stg', df)
-        con.execute('''INSERT INTO movies SELECT * FROM movies_stg; ''')
-    except Exception as e:
-        print("Error:", str(e))
+        
+        con.execute(''' INSERT INTO movies (movie_id, primary_title, original_title, start_year, runtime_min, num_votes, label, subset)
+                        SELECT tconst as movie_id, 
+                               primaryTitle as primary_title,
+                               originalTitle as original_title, 
+                               startYear as start_year, 
+                               runtimeMinutes as runtime_min, 
+                               numVotes as num_votes, 
+                               label as label, 
+                               subset as subset
+                        FROM movies_stg
+                    ''')

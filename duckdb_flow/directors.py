@@ -11,8 +11,10 @@ def preprocess_directors(df):
     return df
 
 def merge_directors(df, con):
-    try:
-        con.register('directing_stg', df)
-        con.execute('''INSERT INTO directing SELECT * FROM directing_stg; ''')
-    except Exception as e:
-        print("Error:", str(e))
+
+    con.register('directing_stg', df)
+    con.execute('''INSERT INTO  directing (director_id, movie_id) 
+                    SELECT director as director_id,
+                            movie as movie_id
+                    FROM directing_stg; ''')
+ 

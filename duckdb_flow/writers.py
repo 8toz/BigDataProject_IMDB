@@ -8,8 +8,12 @@ def preprocess_writers(df):
     return df
 
 def merge_writers(df, con): 
-    try:
+        
         con.register('writing_stg', df)
-        con.execute('''INSERT INTO writing SELECT * FROM writing_stg; ''')
-    except Exception as e:
-        print("Error:", str(e))
+        con.execute('''INSERT INTO writing (writer_id, movie_id) 
+                        SELECT writer as writer_id, 
+                               movie as movie_id,
+                        FROM writing_stg; ''')
+
+
+       

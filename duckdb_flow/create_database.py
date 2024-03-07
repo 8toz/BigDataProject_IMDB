@@ -17,23 +17,31 @@ def create_database():
         num_votes integer default NULL,
         label boolean default NULL,
         subset char(5) default NULL,
+        audit_time timestamp default CURRENT_TIMESTAMP,
         
-        PRIMARY KEY (movie_id) );
+        PRIMARY KEY (movie_id) 
+        );
+                
                 
     CREATE TABLE IF NOT EXISTS directing (
         director_id char(10) NOT NULL, 
-        movie_id char(10) default NULL, 
+        movie_id char(10) default NULL,
+        audit_time timestamp default CURRENT_TIMESTAMP,
         
-        PRIMARY KEY (director_id, movie_id) );
+        PRIMARY KEY (director_id, movie_id),
+        FOREIGN KEY (movie_id) REFERENCES movies(movie_id));
                 
     CREATE TABLE IF NOT EXISTS writing (
         writer_id char(10) NOT NULL, 
-        movie_id char(10) default NULL, 
+        movie_id char(10) default NULL,
+        audit_time timestamp default CURRENT_TIMESTAMP, 
         
-        PRIMARY KEY (writer_id, movie_id) );
+        PRIMARY KEY (writer_id, movie_id), 
+        FOREIGN KEY (movie_id) REFERENCES movies(movie_id));
                 
     CREATE TABLE IF NOT EXISTS processed_files (
         file_name varchar(200),
+        audit_time timestamp default CURRENT_TIMESTAMP,
         
         PRIMARY KEY (file_name)
         );

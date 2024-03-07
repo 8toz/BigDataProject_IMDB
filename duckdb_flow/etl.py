@@ -70,8 +70,10 @@ def preprocess_data(processed_files):
     merge_directors(directing_df, con)
     merge_writers(writing_df, con)
 
-    con.register('files_checked', pd.DataFrame(new_files))
-    con.execute('''INSERT INTO processed_files SELECT * FROM files_checked; ''')
+    con.register('files_checked', pd.DataFrame(new_files, columns=["file_name"]))
+    con.execute('''INSERT INTO processed_files (file_name)
+                    SELECT file_name as file_name
+                    FROM files_checked; ''')
     con.close()
 
     return movies_df, directing_df, writing_df
