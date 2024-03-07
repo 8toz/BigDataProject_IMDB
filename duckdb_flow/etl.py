@@ -27,12 +27,13 @@ def preprocess_data(processed_files):
     # Checks for unprocessed files
     trigger = 0
     dfs = []
+    new_files = []
     directing_df = pd.DataFrame()
     writing_df = pd.DataFrame()
     for file in os.listdir(STAGING_PATH):
         if file not in processed_files and is_valid(file):
             trigger += 1
-            processed_files.append(file)
+            new_files.append(file)
             fn_no_ext = file.split(".")[0]
             if ".json" in file:
                 globals()[fn_no_ext+"_df"] = pd.read_json(os.path.join(STAGING_PATH, file))
@@ -69,7 +70,7 @@ def preprocess_data(processed_files):
     merge_directors(directing_df, con)
     merge_writers(writing_df, con)
 
-    con.register('files_checked', pd.DataFrame(processed_files))
+    con.register('files_checked', pd.DataFrame(new_files))
     con.execute('''INSERT INTO processed_files SELECT * FROM files_checked; ''')
     con.close()
 

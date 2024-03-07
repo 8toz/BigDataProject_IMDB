@@ -14,10 +14,19 @@ def integrate_movies(train_df, validation_df, test_df):
 
 def preprocess_movies(train_df, validation_df, test_df):
     movies_df = integrate_movies(train_df, validation_df, test_df)
-    mask = movies_df[movies_df["startYear"].isna()].index
-    # The end date column does not tell us anything so we drop it and fill start date with it
+
+    # NaN value correction
+    mask = movies_df["startYear"].isna()
     movies_df.loc[mask, "startYear"] = movies_df.loc[mask, "endYear"]
     movies_df = movies_df.drop(columns="endYear")
+
+    movies_df["numVotes"] = movies_df["numVotes"].fillna(0) 
+    movies_df["runtimeMinutes"] = movies_df["runtimeMinutes"].fillna(0) 
+
+
+    movies_df["startYear"] = movies_df["startYear"].astype(int)
+    movies_df["numVotes"] = movies_df["numVotes"].astype(int)
+    movies_df["runtimeMinutes"] = movies_df["runtimeMinutes"].astype(int)
 
     return movies_df
 
