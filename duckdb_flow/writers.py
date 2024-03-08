@@ -13,7 +13,8 @@ def merge_writers(df, con):
         con.execute('''INSERT INTO writing (writer_id, movie_id) 
                         SELECT writer as writer_id, 
                                movie as movie_id,
-                        FROM writing_stg; ''')
+                        FROM writing_stg ON CONFLICT (writer_id, movie_id) DO NOTHING; 
+                    ''')
 
 
        

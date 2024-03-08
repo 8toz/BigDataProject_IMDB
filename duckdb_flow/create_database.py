@@ -17,6 +17,8 @@ def create_database():
         num_votes integer default NULL,
         label boolean default NULL,
         subset char(5) default NULL,
+        title_changed boolean default NULL,
+        title_length integer default NULL,
         audit_time timestamp default CURRENT_TIMESTAMP,
         
         PRIMARY KEY (movie_id) 
