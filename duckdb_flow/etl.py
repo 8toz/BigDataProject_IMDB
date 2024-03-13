@@ -9,7 +9,10 @@ from duckdb_flow.writers import preprocess_writers, merge_writers
 STAGING_PATH = "./data"
 DATABASE_PATH = "./database/DDBB_duckdb.duckdb"
 
-def get_processed_files():
+def get_processed_files() -> list:
+    """
+    Return - a list of the processed files to avoid processing them again
+    """
     con = duckdb.connect(database=DATABASE_PATH, read_only=False)
     processed_files = []
     result = con.execute('''select * from processed_files''')
@@ -19,12 +22,24 @@ def get_processed_files():
 
     return processed_files
 
-def is_valid(file):
+def is_valid(file: str) -> bool:
+    """
+    Check wether the files are csv or json ignore the rest
+    """
     return True if ".csv" in file or ".json" in file else False
 
 
-def preprocess_data(processed_files):
-    # Checks for unprocessed files
+def preprocess_data(processed_files: list) -> pd.DataFrame:
+    """
+    Main method that inserts the data into the SQL tables and orquestrate everything
+    1 - We check if files have not been processed yet
+    2 - We extract the csv data and the json one into separated files
+    3 - We integrate and clean it
+    4 - We update the tables with the new data
+    5 - We insert the new files in the processed_files tables to avoid reading through them again
+
+    Returns - Movies, directing and writers DataFrames if any (This method can be improved)
+    """
     trigger = 0
     dfs = []
     new_files = []

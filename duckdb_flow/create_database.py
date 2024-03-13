@@ -3,7 +3,11 @@ import duckdb
 STAGING_PATH = "./data"
 DATABASE_PATH = "./database/DDBB_duckdb.duckdb"
 
-def create_database():
+def create_database() -> str:
+
+    """
+    Creates all the tables for the duckdb DDBB is they do not exist
+    """
 
     con = duckdb.connect(database=DATABASE_PATH, read_only=False)
 
