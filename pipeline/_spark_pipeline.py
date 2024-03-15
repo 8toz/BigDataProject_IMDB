@@ -28,16 +28,6 @@ os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 # Database path
 DATABASE_PATH = "./database/DDBB_duckdb.duckdb"
 
-def input_preprocessing(input_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Preprocessing actions required for the movies dataset.
-    
-    :param movies: pd.DataFrame containing the movies table from DuckDB
-    """
-    # Temporal fix: There are NaN columns that break the cast from Pandas Dataframe to Spark Dataframe in main().
-    input_df.dropna(axis=0, inplace=True)
-    input_df.loc[:, 'label'].replace({True: 'True', False: 'False'}, inplace=True)
-    return input_df
 
 def fetch_duckdb() -> list[pd.DataFrame]:
     """
@@ -47,9 +37,77 @@ def fetch_duckdb() -> list[pd.DataFrame]:
     :param
     """
     con = duckdb.connect(database=DATABASE_PATH, read_only=False)
-    movies = con.execute('''select * from movies''').fetch_df()
+    movies = con.execute('''
+    WITH director_avg_scores AS (
+        SELECT 
+            d.director_id,
+            COALESCE(SUM(CASE WHEN m.label THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0.5) AS director_avg_score
+        FROM 
+            directing d
+        INNER JOIN 
+            movies m ON d.movie_id = m.movie_id
+        WHERE 
+            m.subset = 'train'
+        GROUP BY 
+            d.director_id
+    ),
+    director_scores AS (
+        SELECT 
+            d.movie_id,
+            COUNT(d.director_id) AS director_count,
+            AVG(COALESCE(das.director_avg_score, 0.5)) AS director_avg_score
+        FROM 
+            directing d
+        LEFT JOIN 
+            director_avg_scores das ON das.director_id = d.director_id
+        GROUP BY 
+            d.movie_id
+    ),
+    writer_avg_scores AS (
+        SELECT 
+            w.writer_id,
+            COALESCE(SUM(CASE WHEN m.label THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0.5) AS writer_avg_score
+        FROM 
+            writing w
+        INNER JOIN 
+            movies m ON w.movie_id = m.movie_id
+        WHERE 
+            m.subset = 'train'
+        GROUP BY 
+            w.writer_id
+    ),
+    writer_scores AS (
+        SELECT 
+            w.movie_id,
+            COUNT(w.writer_id) AS writer_count,
+            AVG(COALESCE(was.writer_avg_score, 0.5)) AS writer_avg_score
+        FROM 
+            writing w
+        LEFT JOIN 
+            writer_avg_scores was ON w.writer_id = was.writer_id
+        GROUP BY 
+            w.movie_id
+    )
+    SELECT 
+        m.movie_id,
+        m.num_votes,
+        m.runtime_min,
+        m.title_length,
+        ds.director_avg_score,
+        COALESCE(ds.director_count, 0) AS director_count,
+        m.label,
+        ws.writer_avg_score,
+        COALESCE(ws.writer_count, 0) AS writer_count
+    FROM 
+        movies m
+    LEFT JOIN 
+        director_scores ds ON m.movie_id = ds.movie_id
+    LEFT JOIN 
+        writer_scores ws ON m.movie_id = ws.movie_id
+    WHERE 
+        m.subset = 'train';
+    ''').fetch_df()
     con.close()
-    movies = input_preprocessing(movies)
 
     return [movies]
 
