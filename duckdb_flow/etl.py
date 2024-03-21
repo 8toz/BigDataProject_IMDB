@@ -54,16 +54,17 @@ def preprocess_data(processed_files: list) -> pd.DataFrame:
                 globals()[fn_no_ext+"_df"] = pd.read_json(os.path.join(STAGING_PATH, file))
                 print("Created ", fn_no_ext+"_df", " dataframe.")
             elif ".csv" in file:
-                if "validation" in file:
+                if "validation_hidden.csv" in file:
                     validation_df = pd.read_csv(os.path.join(STAGING_PATH, file), index_col=0, na_values=['\\N'])
                     continue
-                elif "test" in file:
+                elif "test_hidden.csv" in file:
                     test_df = pd.read_csv(os.path.join(STAGING_PATH, file), index_col=0, na_values=['\\N'])
                     continue
-                df = pd.read_csv(os.path.join(STAGING_PATH, file), index_col=0, na_values=['\\N'])
-                print("Appending: ", df.shape[0], " rows...")
-                dfs.append(df)
-                train_df = pd.concat(dfs, ignore_index=True)
+                elif "train" in file:
+                    df = pd.read_csv(os.path.join(STAGING_PATH, file), index_col=0, na_values=['\\N'])
+                    print("Appending: ", df.shape[0], " rows...")
+                    dfs.append(df)
+                    train_df = pd.concat(dfs, ignore_index=True)
             else: 
                 pass
         if trigger == 0:
