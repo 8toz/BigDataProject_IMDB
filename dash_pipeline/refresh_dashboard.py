@@ -19,13 +19,13 @@ CASE
 WHEN table_name = 'movies' THEN (
                                 SELECT COUNT(*)
                                 FROM (
-                                      SELECT primary_title, original_title, COUNT(*)
+                                      SELECT primary_title, original_title, start_year,runtime_min,num_votes, COUNT(*)
 
-                                      FROM movies
+                                     FROM movies
 
-                                      GROUP BY primary_title, original_title
+                                     GROUP BY primary_title, original_title, start_year,runtime_min,num_votes,
 
-                                      HAVING COUNT(*) > 1
+                                     HAVING COUNT(*) > 1
                                       )
                                 )
 WHEN table_name = 'directing' THEN (
